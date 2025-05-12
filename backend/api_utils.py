@@ -1,18 +1,15 @@
 import sqlite3
 import requests
 import os
-import joblib
-import numpy as np
 
+# OpenChargeMap API key
 API_KEY = "2a87c0ca-2e58-4fe3-886b-558b4826f7cd"
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model', 'station_model.pkl')
-SCALER_PATH = os.path.join(os.path.dirname(__file__), 'model', 'scaler.pkl')
 
-# Функция для работы с базой данных
+# Connect to the local SQLite database
 def connect_db():
     return sqlite3.connect('db/stations.db')
 
-# Функция для создания базы данных и таблицы, если они не существуют
+# Create the stations table if it doesn't exist
 def create_db():
     conn = connect_db()
     cursor = conn.cursor()
@@ -31,7 +28,7 @@ def create_db():
     conn.commit()
     conn.close()
 
-# Функция для добавления новой станции в базу данных
+# Insert a station into the local database
 def insert_station(lat, lon, traffic_density, population_density, existing_stations, has_station, is_predicted=0):
     conn = connect_db()
     cursor = conn.cursor()
@@ -42,80 +39,71 @@ def insert_station(lat, lon, traffic_density, population_density, existing_stati
     conn.commit()
     conn.close()
 
-# Функция для получения ближайших станций из базы данных или через OpenChargeMap API
-def find_nearby_stations(lat, lon, distance_km=10):
+# Get stations within visible map bounds (from local DB or fetch from OpenChargeMap if empty)
+def find_stations_in_bounds(north, south, east, west):
     conn = connect_db()
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM stations WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?',
-                   (lat-0.1, lat+0.1, lon-0.1, lon+0.1))
+
+    # Select stations within the bounds
+    cursor.execute('''
+        SELECT lat, lon, traffic_density, population_density, existing_stations, has_station
+        FROM stations
+        WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+    ''', (south, north, west, east))
     rows = cursor.fetchall()
     conn.close()
 
     stations = []
     for row in rows:
         stations.append({
-            "lat": row[1],
-            "lon": row[2],
-            "traffic_density": row[3],
-            "population_density": row[4],
-            "existing_stations": row[5]
+            "lat": row[0],
+            "lon": row[1],
+            "traffic_density": row[2],
+            "population_density": row[3],
+            "existing_stations": row[4],
+            "has_station": row[5],
+            "name": f"Station ({row[0]:.4f}, {row[1]:.4f})",
+            "address": "Unknown"
         })
-    
-    # Если станций не найдено в базе, получим через OpenChargeMap API
+
+    # If no stations found, fetch from OpenChargeMap and add them to database
     if not stations:
         url = "https://api.openchargemap.io/v3/poi/"
         params = {
             "output": "json",
-            "latitude": lat,
-            "longitude": lon,
-            "distance": distance_km,
+            "boundingbox": f"{north},{south},{east},{west}",
             "distanceunit": "KM",
             "maxresults": 50,
             "key": API_KEY
         }
+
         try:
             response = requests.get(url, params=params)
             response.raise_for_status()
             data = response.json()
+
             for item in data:
                 lat = item.get("AddressInfo", {}).get("Latitude")
                 lon = item.get("AddressInfo", {}).get("Longitude")
                 if lat and lon:
-                    # Для реальных данных добавляем значения для трафика, плотности населения и существующих станций (в этом примере случайные значения)
-                    traffic_density = 500  # Примерное значение для трафика
-                    population_density = 2000  # Примерное значение для плотности населения
-                    existing_stations = 3  # Примерное количество существующих станций
-                    has_station = 1  # Считаем, что станция существует
+                    traffic_density = 500  # Placeholder value
+                    population_density = 2000  # Placeholder value
+                    existing_stations = 3  # Placeholder value
+                    has_station = 1  # Since it's from OpenChargeMap
 
-                    # Добавляем данные в базу
                     insert_station(lat, lon, traffic_density, population_density, existing_stations, has_station)
 
                     stations.append({
-                        "name": item.get("AddressInfo", {}).get("Title", "Unnamed Station"),
                         "lat": lat,
                         "lon": lon,
+                        "traffic_density": traffic_density,
+                        "population_density": population_density,
+                        "existing_stations": existing_stations,
+                        "has_station": has_station,
+                        "name": item.get("AddressInfo", {}).get("Title", "Unnamed Station"),
                         "address": item.get("AddressInfo", {}).get("AddressLine1", "No address")
                     })
         except requests.RequestException as e:
-            print(f"Error fetching stations: {e}")
-    
+            print(f"Error fetching stations from OpenChargeMap: {e}")
+
     return stations
-
-# Функция для получения данных для обучения модели
-def get_training_data():
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT lat, lon, traffic_density, population_density, existing_stations, has_station FROM stations')
-    rows = cursor.fetchall()
-    conn.close()
-
-    # Преобразуем строки в формат, подходящий для обучения
-    data = []
-    for row in rows:
-        data.append({
-            "traffic_density": row[2],
-            "population_density": row[3],
-            "existing_stations": row[4],
-            "has_station": row[5]
-        })
-    return data

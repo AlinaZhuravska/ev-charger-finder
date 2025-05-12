@@ -1,19 +1,46 @@
 import sqlite3
 from flask import Flask, jsonify, request
-from api_utils import find_nearby_stations
+from api_utils import find_stations_in_bounds, create_db
 
 app = Flask(__name__)
 
-# Функция для работы с базой данных
+# Create DB and table if not exists
+create_db()
+
+# Connect to the SQLite database
 def connect_db():
     return sqlite3.connect('db/stations.db')
 
+# Endpoint to fetch stations visible in current map bounds or by center point
 @app.route("/stations-nearby", methods=["GET"])
 def stations_nearby():
-    lat = float(request.args.get("lat"))
-    lon = float(request.args.get("lon"))
-    stations = find_nearby_stations(lat, lon)
-    return jsonify(stations)
+    try:
+        # Case 1: Bounds mode (used in MapPage)
+        if all(param in request.args for param in ["north", "south", "east", "west"]):
+            north = float(request.args.get("north"))
+            south = float(request.args.get("south"))
+            east = float(request.args.get("east"))
+            west = float(request.args.get("west"))
+            stations = find_stations_in_bounds(north, south, east, west)
+            return jsonify(stations)
+        
+        # Case 2: Lat/Lon mode (used in StationPlanningPage)
+        elif all(param in request.args for param in ["lat", "lon"]):
+            lat = float(request.args.get("lat"))
+            lon = float(request.args.get("lon"))
+            delta = 0.05  # ~5km bounding box
+            north = lat + delta
+            south = lat - delta
+            east = lon + delta
+            west = lon - delta
+            stations = find_stations_in_bounds(north, south, east, west)
+            return jsonify(stations)
+
+        else:
+            return jsonify({"error": "Missing required parameters"}), 400
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
     app.run(debug=True)

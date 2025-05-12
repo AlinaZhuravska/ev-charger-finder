@@ -8,7 +8,7 @@ def populate_dummy_data(num_rows=100):
     cursor = conn.cursor()
 
     for _ in range(num_rows):
-        lat = round(random.uniform(46.5, 47.5), 6)  # координаты в пределах Швейцарии
+        lat = round(random.uniform(46.5, 47.5), 6)  # Coordinates within Switzerland
         lon = round(random.uniform(6.5, 8.5), 6)
         traffic_density = random.randint(50, 300)
         population_density = random.randint(100, 500)
@@ -25,3 +25,4 @@ def populate_dummy_data(num_rows=100):
 
 if __name__ == "__main__":
     populate_dummy_data()
+

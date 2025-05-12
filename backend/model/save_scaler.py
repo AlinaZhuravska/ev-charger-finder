@@ -3,8 +3,8 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 
-# === Пример обучающих данных ===
-# Формат: [traffic_density, population_density, existing_stations]
+# === Example training data ===
+# Format: [traffic_density, population_density, existing_stations]
 X = np.array([
     [100, 2000, 1],
     [150, 3000, 0],
@@ -13,11 +13,11 @@ X = np.array([
     [200, 5000, 3]
 ])
 
-# === Обучение скейлера ===
+# === Train the scaler ===
 scaler = StandardScaler()
 scaler.fit(X)
 
-# === Сохранение в файл ===
+# === Save to file ===
 scaler_path = os.path.join(os.path.dirname(__file__), "scaler.pkl")
 joblib.dump(scaler, scaler_path)
 

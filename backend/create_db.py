@@ -2,7 +2,7 @@
 
 from api_utils import create_db
 
-# Создаем базу данных и таблицу
+# Create the database and table
 create_db()
 
 print("Database and table created successfully.")
