@@ -39,12 +39,55 @@ def insert_station(lat, lon, traffic_density, population_density, existing_stati
     conn.commit()
     conn.close()
 
-# Get stations within visible map bounds (from local DB or fetch from OpenChargeMap if empty)
+# Fetch stations from OpenChargeMap with pagination support
+def fetch_from_ocm(north, south, east, west):
+    all_data = []
+    page = 1
+    while True:
+        params = {
+            "output": "json",
+            "boundingbox": f"{north},{south},{east},{west}",
+            "distanceunit": "KM",
+            "maxresults": 50,  # You can adjust this as needed
+            "page": page,  # Pagination parameter
+            "key": API_KEY
+        }
+        try:
+            response = requests.get("https://api.openchargemap.io/v3/poi/", params=params)
+            data = response.json()
+            if not data:  # Stop loop if no data is returned
+                break
+            all_data.extend(data)
+            page += 1  # Go to the next page
+        except Exception as e:
+            print(f"[OCM Error] {e}")
+            break
+    return all_data
+
+# Fetch stations from Overpass API
+def fetch_from_overpass(north, south, east, west):
+    query = f"""
+    [out:json][timeout:25];
+    (
+      node["amenity"="charging_station"]({south},{west},{north},{east});
+      way["amenity"="charging_station"]({south},{west},{north},{east});
+      relation["amenity"="charging_station"]({south},{west},{north},{east});
+    );
+    out body;  // This gives more detailed results
+    """
+    try:
+        response = requests.post("https://overpass-api.de/api/interpreter", data={"data": query})
+        return response.json().get("elements", [])
+    except Exception as e:
+        print(f"[Overpass Error] {e}")
+        return []
+
+# Find stations within the specified bounding box
 def find_stations_in_bounds(north, south, east, west):
     conn = connect_db()
     cursor = conn.cursor()
 
-    # Select stations within the bounds
+    # Select stations within the bounds from the local database
     cursor.execute('''
         SELECT lat, lon, traffic_density, population_density, existing_stations, has_station
         FROM stations
@@ -66,44 +109,55 @@ def find_stations_in_bounds(north, south, east, west):
             "address": "Unknown"
         })
 
-    # If no stations found, fetch from OpenChargeMap and add them to database
+    # If no stations found in the local DB, fetch from OpenChargeMap and add them to the DB
     if not stations:
-        url = "https://api.openchargemap.io/v3/poi/"
-        params = {
-            "output": "json",
-            "boundingbox": f"{north},{south},{east},{west}",
-            "distanceunit": "KM",
-            "maxresults": 50,
-            "key": API_KEY
-        }
+        # Fetch from OpenChargeMap if no local stations
+        ocm_data = fetch_from_ocm(north, south, east, west)
+        for item in ocm_data:
+            lat = item.get("AddressInfo", {}).get("Latitude")
+            lon = item.get("AddressInfo", {}).get("Longitude")
+            if lat and lon:
+                traffic_density = 500  # Placeholder value
+                population_density = 2000  # Placeholder value
+                existing_stations = 3  # Placeholder value
+                has_station = 1  # Since it's from OpenChargeMap
 
-        try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
+                insert_station(lat, lon, traffic_density, population_density, existing_stations, has_station)
 
-            for item in data:
-                lat = item.get("AddressInfo", {}).get("Latitude")
-                lon = item.get("AddressInfo", {}).get("Longitude")
-                if lat and lon:
-                    traffic_density = 500  # Placeholder value
-                    population_density = 2000  # Placeholder value
-                    existing_stations = 3  # Placeholder value
-                    has_station = 1  # Since it's from OpenChargeMap
+                stations.append({
+                    "lat": lat,
+                    "lon": lon,
+                    "traffic_density": traffic_density,
+                    "population_density": population_density,
+                    "existing_stations": existing_stations,
+                    "has_station": has_station,
+                    "name": item.get("AddressInfo", {}).get("Title", "Unnamed Station"),
+                    "address": item.get("AddressInfo", {}).get("AddressLine1", "No address")
+                })
 
-                    insert_station(lat, lon, traffic_density, population_density, existing_stations, has_station)
+    # If still no stations found, fetch from Overpass API and add them to the DB
+    if not stations:
+        osm_data = fetch_from_overpass(north, south, east, west)
+        for obj in osm_data:
+            lat = obj.get("lat") or obj.get("center", {}).get("lat")
+            lon = obj.get("lon") or obj.get("center", {}).get("lon")
+            if lat and lon:
+                traffic_density = 500  # Placeholder value
+                population_density = 2000  # Placeholder value
+                existing_stations = 3  # Placeholder value
+                has_station = 1  # Since it's from Overpass API
 
-                    stations.append({
-                        "lat": lat,
-                        "lon": lon,
-                        "traffic_density": traffic_density,
-                        "population_density": population_density,
-                        "existing_stations": existing_stations,
-                        "has_station": has_station,
-                        "name": item.get("AddressInfo", {}).get("Title", "Unnamed Station"),
-                        "address": item.get("AddressInfo", {}).get("AddressLine1", "No address")
-                    })
-        except requests.RequestException as e:
-            print(f"Error fetching stations from OpenChargeMap: {e}")
+                insert_station(lat, lon, traffic_density, population_density, existing_stations, has_station)
+
+                stations.append({
+                    "lat": lat,
+                    "lon": lon,
+                    "traffic_density": traffic_density,
+                    "population_density": population_density,
+                    "existing_stations": existing_stations,
+                    "has_station": has_station,
+                    "name": "Unnamed Station",
+                    "address": "No address"
+                })
 
     return stations
