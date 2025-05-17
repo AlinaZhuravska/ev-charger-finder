@@ -15,7 +15,7 @@ def populate_dummy_data(num_rows=100):
         existing_stations = random.randint(0, 5)
 
         cursor.execute("""
-            INSERT INTO stations (lat, lon, traffic_density, population_density, existing_stations)
+            INSERT INTO stations (lat, lon, traffic_density, population_density, existing_stations, is_predicted)
             VALUES (?, ?, ?, ?, ?)
         """, (lat, lon, traffic_density, population_density, existing_stations))
 

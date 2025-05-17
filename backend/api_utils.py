@@ -1,6 +1,58 @@
 import sqlite3
 import requests
 import os
+import random
+import pandas as pd  # Added for creating DataFrame
+
+from sklearn.linear_model import LogisticRegression
+import joblib
+
+# === Load ML model and scaler ===
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model", "model.pkl")
+SCALER_PATH = os.path.join(os.path.dirname(__file__), "model", "scaler.pkl")
+
+try:
+    model = joblib.load(MODEL_PATH)
+except Exception as e:
+    print(f"Error when loading the model: {e}")
+    model = None
+
+try:
+    scaler = joblib.load(SCALER_PATH)
+except Exception as e:
+    print(f"Error when loading the scaler: {e}")
+    scaler = None
+
+if model is None or scaler is None:
+    print("The model or scaler is not loaded. Check if the files are available and try again.")
+    # Additional option to raise an exception or terminate the program
+    # raise RuntimeError("Model or scaler not loaded.")
+
+def get_training_data():
+    """
+    Loads data from the database for model training.
+    It is expected that the 'stations' table contains the following fields:
+    - traffic_density (REAL)
+    - population_density (REAL)
+    - existing_stations (INTEGER)
+    - has_station (INTEGER: 0 or 1)
+    """
+    conn = sqlite3.connect("db/stations.db")
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT traffic_density, population_density, existing_stations, has_station
+            FROM stations
+            WHERE traffic_density IS NOT NULL
+              AND population_density IS NOT NULL
+              AND existing_stations IS NOT NULL
+              AND has_station IS NOT NULL
+        """)
+        data = cursor.fetchall()
+        return data
+    finally:
+        conn.close()
 
 # OpenChargeMap API key
 API_KEY = "2a87c0ca-2e58-4fe3-886b-558b4826f7cd"
@@ -89,7 +141,7 @@ def find_stations_in_bounds(north, south, east, west):
 
     # Select stations within the bounds from the local database
     cursor.execute('''
-        SELECT lat, lon, traffic_density, population_density, existing_stations, has_station
+        SELECT lat, lon, traffic_density, population_density, existing_stations, has_station, is_predicted
         FROM stations
         WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
     ''', (south, north, west, east))
@@ -105,6 +157,7 @@ def find_stations_in_bounds(north, south, east, west):
             "population_density": row[3],
             "existing_stations": row[4],
             "has_station": row[5],
+            "is_predicted": row[6],
             "name": f"Station ({row[0]:.4f}, {row[1]:.4f})",
             "address": "Unknown"
         })
@@ -160,4 +213,40 @@ def find_stations_in_bounds(north, south, east, west):
                     "address": "No address"
                 })
 
+    # Predict if a station should be added based on the ML model
+    if not stations:
+        # Generate random coordinates within the bounding box
+        for _ in range(10):  # Generate 10 random points
+            lat = random.uniform(south, north)
+            lon = random.uniform(west, east)
+            traffic_density = random.randint(50, 300)
+            population_density = random.randint(100, 500)
+            existing_stations = random.randint(0, 5)
+
+            X_input = [[traffic_density, population_density, existing_stations]]
+            X_scaled = scaler.transform(X_input)
+            has_station_pred = int(model.predict(X_scaled)[0])
+
+            if has_station_pred == 1:
+                insert_station(
+                    lat, lon,
+                    traffic_density,
+                    population_density,
+                    existing_stations,
+                    has_station_pred,
+                    is_predicted=1
+                )
+
+            stations.append({
+                "lat": lat,
+                "lon": lon,
+                "traffic_density": traffic_density,
+                "population_density": population_density,
+                "existing_stations": existing_stations,
+                "has_station": has_station_pred,
+                "is_predicted": 1,
+                "name": "Predicted Station",
+                "address": "Predicted by model"
+            })
     return stations
+

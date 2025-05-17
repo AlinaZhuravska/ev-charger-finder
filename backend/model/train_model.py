@@ -36,7 +36,7 @@ model.fit(X_scaled, y)
 model_dir = os.path.join(os.path.dirname(__file__), 'model')
 os.makedirs(model_dir, exist_ok=True)
 
-joblib.dump(model, os.path.join(model_dir, "station_model.pkl"))
+joblib.dump(model, os.path.join(model_dir, "model.pkl"))
 joblib.dump(scaler, os.path.join(model_dir, "scaler.pkl"))
 
 print("Model and scaler successfully saved.")
