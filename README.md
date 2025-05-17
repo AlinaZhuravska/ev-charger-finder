@@ -25,4 +25,4 @@ __StandardScaler__ – for feature normalization before model inference
 
 __Development Tools:__  
 __Git & GitHub__ – for version control and collaborative development  
-__Postman__ – for testing backend endpoints during development (optional)
+__Postman__ – for testing backend endpoints during development
