@@ -1,0 +1,15 @@
+/* index.css */
+
+/* Reset and base styles */
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+@layer components {
+  .btn {
+    padding: 1rem 2rem;
+    border-radius: 0.25rem;
+    background-color: #F59E0B;
+    color: #FFFFFF;
+  }
+}
+
