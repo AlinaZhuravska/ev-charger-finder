@@ -1,4 +1,5 @@
 import sqlite3
+import requests
 from flask import Flask, jsonify, request
 from api_utils import find_stations_in_bounds, create_db
 
@@ -23,7 +24,7 @@ def stations_nearby():
             west = float(request.args.get("west"))
             stations = find_stations_in_bounds(north, south, east, west)
             return jsonify(stations)
-        
+
         # Case 2: Lat/Lon mode (used in StationPlanningPage)
         elif all(param in request.args for param in ["lat", "lon"]):
             lat = float(request.args.get("lat"))
@@ -41,6 +42,30 @@ def stations_nearby():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+# Proxy endpoint for geocoding using OpenStreetMap Nominatim
+@app.route("/geocode", methods=["GET"])
+def geocode():
+    address = request.args.get("address")
+    if not address:
+        return jsonify({"error": "Missing address parameter"}), 400
+
+    nominatim_url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": address,
+        "format": "json",
+        "limit": 1,
+    }
+    headers = {
+        "User-Agent": "ev-finder-app/1.0 (alizhuravska@gmail.com)"  
+    }
+
+    try:
+        response = requests.get(nominatim_url, params=params, headers=headers)
+        response.raise_for_status()
+        return jsonify(response.json())
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

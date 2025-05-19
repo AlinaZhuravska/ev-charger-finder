@@ -6,10 +6,17 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      // Прокси для API Flask-сервера
+      // Proxy for Flask API server
       '/stations-nearby': 'http://localhost:5000',
       '/predict-location': 'http://localhost:5000',
       '/predict-area': 'http://localhost:5000',
+
+      // New path for geocoding proxying (via Flask)
+      '/geocode': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      }
     }
   }
 })
